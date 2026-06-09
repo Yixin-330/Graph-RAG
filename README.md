@@ -2,252 +2,333 @@
 
 ## 📋 项目概述
 
-本项目为文旅场景的数字人运营系统提供了完整的Graph RAG数据库与知识图谱解决方案，实现了从数据采集、知识抽取、图谱构建到智能检索、对话交互的全流程。
+本项目为**双服务架构**的统一底层平台，基于 Graph RAG 与知识图谱技术：
 
-## 🏗️ 系统架构
+| 服务 | 说明 | 状态 |
+|------|------|:----:|
+| 🏛️ **文旅数字人对话** | 景区推荐、路线规划、文化问答、数字人交互 | 原有 |
+| ✂️ **非遗剪纸智能生成** | 关键词驱动、图谱约束、AI 图像生成 | ✅ 新增 |
+
+两者共享 `CulturalHeritage` 文化遗产实体作为领域桥梁，通过统一的 Graph RAG 架构实现知识检索与推理。
+
+---
+
+## 🏗️ 系统全景架构
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    数字人对话层                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │  对话管理     │  │  用户画像     │  │  响应生成     │  │
-│  └──────────────┘  └──────────────┘  └──────────────┘  │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                  Graph RAG检索引擎                       │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │  向量检索     │  │  图结构检索   │  │  知识推理     │  │
-│  │  (Milvus)    │  │  (Neo4j)     │  │  (GDS)       │  │
-│  └──────────────┘  └──────────────┘  └──────────────┘  │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                  知识图谱构建层                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │  数据采集     │  │  实体抽取     │  │  知识融合     │  │
-│  └──────────────┘  └──────────────┘  └──────────────┘  │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│                  数据存储层                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │  Neo4j图数据库│  │  Milvus向量库 │  │  Redis缓存   │  │
-│  └──────────────┘  └──────────────┘  └──────────────┘  │
-└─────────────────────────────────────────────────────────┘
+                    用户/前端
+                        │
+              ┌─────────┴──────────┐
+              │  FastAPI 服务层      │  papercut_api_service.py
+              │  POST /generate      │
+              │  GET  /patterns      │
+              └─────────┬──────────┘
+                        │
+     ┌──────────────────┼──────────────────┐
+     │                  │                   │
+     ▼                  ▼                   ▼
+┌────────────┐  ┌──────────────┐  ┌──────────────────┐
+│ 文旅数字人   │  │ 非遗剪纸约束   │  │ 图像生成管线     │
+│ 对话系统    │  │ Graph RAG    │  │ SD/ControlNet    │
+│ digital_   │  │ papercut_    │  │ Mock/Local/API   │
+│ human_     │  │ graph_rag_   │  │ papercut_image_  │
+│ integra-   │  │ engine.py    │  │ generator.py     │
+│ tion.py    │  └──────┬───────┘  └──────────────────┘
+└──────┬─────┘         │
+       │               │ 结构化约束参数
+       │     ┌─────────┴──────────┐
+       │     │ 知识抽取管道        │
+       │     │ 断点续传 6 阶段     │
+       │     │ papercut_extrac-   │
+       │     │ tion_pipeline.py   │
+       │     └─────────┬──────────┘
+       │               │
+       ▼               ▼
+┌───────────────────────────────────────────┐
+│              知识图谱本体层                 │
+│  ┌────────────────┐ ┌──────────────────┐  │
+│  │  文旅本体        │ │  剪纸本体          │  │
+│  │  7 实体 / 10 关系│ │  8 实体 / 15 关系  │  │
+│  │  knowledge_     │ │  papercut_       │  │
+│  │  graph_ontology │ │  knowledge_      │  │
+│  │  .py            │ │  ontology.py     │  │
+│  └────────────────┘ └──────────────────┘  │
+│  ┌────────────────────────────────────┐   │
+│  │  共享文化遗产桥接 CulturalHeritage  │   │
+│  └────────────────────────────────────┘   │
+└───────────────────────────────────────────┘
+                        │
+               ┌────────┴────────┐
+               │   数据存储层     │
+               │ Neo4j / Milvus  │
+               └─────────────────┘
 ```
+
+---
 
 ## 📁 项目文件说明
 
-### 1. `tourism_knowledge_graph_schema.md`
-**知识图谱Schema设计文档**
-- 定义了6类核心实体：景区景点、文化遗产、旅游路线、服务设施、活动节庆、游客画像
-- 设计了15种关系类型：空间关系、旅游关系、文化关系、服务关系、相似关系
-- 包含完整的属性定义、索引设计、约束规则
-- 提供典型查询模式示例
+### 🏛️ 文旅数字人系统（原有，保持不动）
 
-### 2. `graph_rag_architecture.md`
-**Graph RAG数据库架构设计**
-- 技术栈选型与对比（Neo4j vs Apache Age, Milvus vs Qdrant）
-- Graph RAG融合架构详细设计
-- 混合检索引擎实现方案
-- 数据同步与更新策略
-- 性能优化与监控运维方案
+| 文件 | 说明 |
+|------|------|
+| `knowledge_graph_ontology.py` | 文旅本体：7 实体(景区/文化遗产/路线等) + 10 关系 + Neo4j Schema |
+| `knowledge_extraction_pipeline.py` | 文旅数据抽取 Pipeline |
+| `graph_rag_engine.py` | 文旅 Graph RAG 检索与推理引擎（向量+图+推理三路融合） |
+| `digital_human_integration.py` | 数字人对话接口（对话管理、用户画像、响应生成） |
+| `graph_rag_architecture.md` | Graph RAG 架构设计文档 |
+| `tourism_knowledge_graph_schema.md` | 知识图谱 Schema 设计文档 |
+| `ARCHITECTURE_EXPLAINED.md` | 架构详解 |
 
-### 3. `knowledge_graph_ontology.py`
-**知识图谱本体层实现**
-- 实体类型与关系类型的枚举定义
-- 属性定义与约束规则
-- 本体Schema自动生成Neo4j创建语句
-- 实体验证与推理规则
-- 支持JSON导出与导入
+### ✂️ 非遗剪纸生成系统（新增）
 
-### 4. `knowledge_extraction_pipeline.py`
-**数据抽取与知识融合Pipeline**
-- 多源数据采集（Web、API、文件、数据库）
-- 实体抽取（景区景点、文化遗产、活动节庆）
-- 关系抽取（空间关系、包含关系、文化关联）
-- 实体融合与去重
-- 知识图谱自动构建
+| 文件 | 说明 | 代码量 |
+|------|------|:------:|
+| `papercut_knowledge_ontology.py` | **剪纸知识图谱本体** — 8 实体 + 15 关系 + 5 条推理规则 + 52 条 Neo4j Schema | ~850 行 |
+| `papercut_seed_data.py` | **内置种子数据** — 14 纹样 + 12 母题 + 7 技法 + 6 流派 + 8 象征 + 6 传承人 + 91 条关系映射 | ~900 行 |
+| `papercut_extraction_pipeline.py` | **断点续传抽取管道** — 6 阶段 + 状态持久化 + 数据源可插拔 | ~890 行 |
+| `papercut_graph_rag_engine.py` | **Graph RAG 约束生成引擎** — 查询分析 → 三路检索 → 6 维推理 → 结构化参数 | ~1350 行 |
+| `papercut_image_generator.py` | **图像生成管线** — PromptBuilder + 三后端(Mock/Local/API) + 后处理 + 结果管理 | ~1100 行 |
+| `papercut_api_service.py` | **RESTful API 服务** — FastAPI 7 端点 + Swagger 文档 | ~590 行 |
+| `papercut_data_sources.json` | **数据源配置** — 可插拔数据源 JSON 配置 | — |
 
-### 5. `graph_rag_engine.py`
-**Graph RAG检索与推理引擎**
-- 查询理解（意图分类、实体识别、查询改写）
-- 向量检索（Milvus集成）
-- 图结构检索（Neo4j Cypher查询）
-- 知识推理（相似度推理、关联推理）
-- 多路召回融合与排序
-- 答案生成
-
-### 6. `digital_human_integration.py`
-**数字人对话接口集成**
-- 对话状态管理
-- 用户画像管理
-- 响应生成（基于检索结果）
-- 个性化推荐
-- 多轮对话上下文维护
-- RESTful API接口
+---
 
 ## 🚀 快速开始
 
 ### 环境要求
-- Python 3.8+
-- Neo4j 5.11+
-- Milvus 2.3+
-- Redis 6.0+
 
-### 安装依赖
+**文旅部分：**
+- Python 3.8+
+- Neo4j 5.11+ / Milvus 2.3+
+
+**剪纸部分新增依赖：**
 ```bash
-pip install neo4j pymilvus redis openai transformers jieba
+pip install fastapi uvicorn python-multipart  # API 服务
+pip install pillow                              # 图像处理（Mock 模式必需）
+pip install torch diffusers transformers        # 本地 SD 生成（可选）
+pip install replicate                           # Replicate API（可选）
 ```
 
-### 启动服务
+### 剪纸服务快速启动
 
-#### 1. 启动Neo4j
+#### 1. 运行知识抽取管道（加载种子数据）
+
 ```bash
-docker run -d \
-  --name tourism_neo4j \
+# 完整运行
+python papercut_extraction_pipeline.py
+
+# 中断后恢复
+python papercut_extraction_pipeline.py --resume
+
+# 输出: pipeline_output/entities_*.json, relations_*.json
+```
+
+#### 2. CLI 约束生成测试
+
+```bash
+# 单次查询
+python papercut_graph_rag_engine.py "婚庆"
+
+# JSON 输出
+python papercut_graph_rag_engine.py "龙年吉祥" -j
+
+# 交互模式
+python papercut_graph_rag_engine.py
+
+# 详细调试
+python papercut_graph_rag_engine.py "花开富贵" -v
+```
+
+#### 3. CLI 图像生成（Mock 模式）
+
+```bash
+# Mock 模式（不需 GPU，生成占位图）
+python papercut_image_generator.py "花开富贵" --backend mock
+
+# 批量生成
+python papercut_image_generator.py "春节福字" -n 4 --backend mock
+```
+
+#### 4. 启动 API 服务
+
+```bash
+uvicorn papercut_api_service:app --host 0.0.0.0 --port 8000
+
+# 打开浏览器访问:
+#   http://localhost:8000/docs   — Swagger API 文档
+#   http://localhost:8000/redoc  — ReDoc 文档
+
+# API 测试:
+curl -X POST http://localhost:8000/api/v1/generate \
+  -H "Content-Type: application/json" \
+  -d '{"keyword": "婚庆"}'
+```
+
+### 文旅服务快速启动
+
+```bash
+# 1. 启动 Neo4j
+docker run -d --name tourism_neo4j \
   -p 7474:7474 -p 7687:7687 \
   -e NEO4J_AUTH=neo4j/password \
   neo4j:5.15.0
-```
 
-#### 2. 启动Milvus
-```bash
-docker run -d \
-  --name tourism_milvus \
-  -p 19530:19530 \
-  milvusdb/milvus:v2.3.3
-```
-
-#### 3. 初始化知识图谱
-```python
+# 2. 初始化知识图谱 Schema
+python -c "
 from knowledge_graph_ontology import TourismOntology
-
-# 创建本体
 ontology = TourismOntology()
+print(ontology.generate_neo4j_schema())
+"
 
-# 生成Neo4j Schema
-schema = ontology.generate_neo4j_schema()
-# 在Neo4j中执行schema语句
-```
-
-#### 4. 运行知识抽取Pipeline
-```python
-from knowledge_extraction_pipeline import KnowledgeExtractionPipeline
-
-pipeline = KnowledgeExtractionPipeline(neo4j_driver)
-result = await pipeline.run(data_sources)
-```
-
-#### 5. 启动数字人对话系统
-```python
+# 3. 启动数字人对话系统
+python -c "
 from digital_human_integration import DigitalHumanDialogueSystem
-
-dialogue_system = DigitalHumanDialogueSystem(
-    graph_rag_engine,
-    neo4j_driver,
-    llm_client
-)
-
-# 开始对话
-response = await dialogue_system.start_session("session_001", "user_001")
+# dialogue_system = DigitalHumanDialogueSystem(graph_rag_engine, neo4j_driver, llm_client)
+"
 ```
+
+---
 
 ## 💡 核心特性
 
-### 1. 知识图谱特化设计
-- 针对文旅场景定制实体与关系
-- 支持多维度属性（地理位置、时间、价格等）
-- 内置推理规则（相似推荐、关联推理）
+### 1. 双领域知识图谱
 
-### 2. Graph RAG融合检索
-- 向量检索：语义相似度匹配
-- 图结构检索：关系路径查询
-- 知识推理：隐含关联发现
-- 多路融合：加权排序与去重
+| 维度 | 文旅领域 | 剪纸领域 |
+|------|---------|---------|
+| 实体类型 | 7 种 | 8 种 |
+| 关系类型 | 10 种 | 15 种 |
+| 推理规则 | 4 条 | 5 条 |
+| 核心实体 | ScenicSpot, CulturalHeritage | PaperCutPattern(30 属性) |
+| 领域特色 | 景区等级/路线规划/用户画像 | 纹样母题/技法/流派/文化象征 |
 
-### 3. 智能对话交互
-- 多轮对话上下文管理
-- 用户画像个性化推荐
-- 意图识别与查询改写
-- 情感化响应生成
+**桥梁：** 两个图谱通过 `CulturalHeritage` 实体和跨域查询方法桥接，文旅侧的"文化遗产"与剪纸侧的"文化象征"语义互通。
 
-### 4. 可扩展架构
-- 模块化设计，易于扩展
-- 支持多数据源接入
-- 增量更新机制
-- 完善的监控体系
+### 2. Graph RAG 约束生成引擎
 
-## 📊 性能指标
+```
+输入: "婚庆"
+  → 查询分析 (意图+实体识别+同义词扩展)
+  → 三路检索 (精确匹配/关键词索引/图遍历2跳)
+  → 6 维推理 (母题/风格/技法/配色/构图/文化)
+  → 输出结构化约束参数 -> 传给图像模型
+```
 
-- **检索延迟**: < 200ms (P95)
-- **检索召回率**: > 85%
-- **答案准确率**: > 90%
-- **并发支持**: 1000+ QPS
+典型输出：
+```json
+{
+  "primary_motif": "龙凤呈祥",
+  "secondary_motifs": ["龙纹", "凤纹", "云纹"],
+  "style": "蔚县剪纸",
+  "technique": "阴阳刻结合",
+  "recommended_colors": ["大红", "金色"],
+  "color_count": 2,
+  "symmetry_type": "轴对称",
+  "complexity": "复杂",
+  "meaning": "婚姻美满、龙凤和鸣、幸福吉祥",
+  "applicable_scenes": ["婚庆"],
+  "generation_prompt": "中国传统剪纸，蔚县剪纸风格，阴阳刻结合技法..."
+}
+```
+
+### 3. 图像生成管线
+
+- **三后端切换**：Mock(测试) / LocalDiffusers(本地 GPU) / API(Replicate/SD WebUI)
+- **后处理**：背景白化 + 边缘锐化 + 红白二值化 + 纸面纹理
+- **批量生成**：多种子探索 + 网格图输出
+- **结果管理**：图像 / 缩略图 / 元数据 JSON / GenerationRecord
+
+### 4. 断点续传管道
+
+- 6 阶段（加载种子→采集→实体→关系→融合→输出）
+- 状态持久化到文件，`--resume` 参数恢复
+- 数据源可插拔（JSON 配置，找到真实网站后启用即可）
+
+### 5. RESTful API
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/v1/health` | GET | 健康检查 |
+| `/api/v1/constraints` | POST | 仅获取约束参数 |
+| `/api/v1/generate` | POST | 端到端生成（约束+图像） |
+| `/api/v1/generate-batch` | POST | 批量多关键词生成 |
+| `/api/v1/patterns` | GET | 纹样/母题查询 |
+| `/api/v1/knowledge/stats` | GET | 知识库统计 |
+| `/api/v1/records` | GET | 生成记录查询 |
+
+---
+
+## 📊 种子数据规模
+
+| 类别 | 数量 | 说明 |
+|------|:----:|------|
+| **纹样** | 14 | 龙凤呈祥、福寿双全、年年有余、四君子、花开富贵等 |
+| **母题** | 12 | 龙纹、凤纹、牡丹、云纹、蝙蝠纹、寿桃等 |
+| **技法** | 7 | 阴刻、阳刻、阴阳刻结合、套色、染色等 |
+| **地域流派** | 6 | 蔚县、扬州、陕北、佛山、漳浦、高密 |
+| **文化象征** | 8 | 福、寿、喜、财、吉祥如意、辟邪等 |
+| **传承人** | 6 | 王老赏、库淑兰、周淑英、张永寿等 |
+| **材料工具** | 6 | 大红宣纸、刻刀、蜡盘等 |
+| **关系** | 91 | 纹样↔母题/技法/流派/象征/材料的全连接 |
+
+---
 
 ## 🔧 配置说明
 
-### Neo4j配置
-```yaml
-neo4j:
-  uri: "bolt://localhost:7687"
-  user: "neo4j"
-  password: "password"
-  max_connection_pool_size: 50
+### 数据源配置 `papercut_data_sources.json`
+
+```json
+{
+  "sources": [
+    {"id": "seed_builtin", "type": "seed", "enabled": true},
+    {"id": "file_import",  "type": "file", "enabled": false, "path": "./data/papercut_import.json"},
+    {"id": "web_crawl",   "type": "web",  "enabled": false, "url": "https://..."},
+    {"id": "api_feed",    "type": "api",  "enabled": false, "url": "https://..."}
+  ]
+}
 ```
 
-### Milvus配置
-```yaml
-milvus:
-  host: "localhost"
-  port: 19530
-  collection_name: "tourism_knowledge"
-  embedding_dim: 1536
+### 图像生成配置
+
+```python
+from papercut_image_generator import GeneratorConfig
+
+config = GeneratorConfig(
+    backend="api",           # "mock" | "local" | "api"
+    output_dir="./output",
+    api_endpoint="https://api.replicate.com/v1/",
+    api_key="your-key",
+    api_model="stability-ai/sdxl:39ed52f2...",
+)
 ```
 
-### LLM配置
-```yaml
-llm:
-  model: "gpt-3.5-turbo"
-  embedding_model: "text-embedding-3-large"
-  temperature: 0.7
-  max_tokens: 2000
-```
+---
 
-## 📈 监控与运维
+## 📈 后续规划
 
-### 关键指标
-- 查询QPS与延迟
-- 检索召回率与准确率
-- 知识图谱节点/关系数量
-- 缓存命中率
-- 用户满意度
+| 优先级 | 计划 | 状态 |
+|:------:|------|:----:|
+| 1 | 剪纸知识图谱本体定义 | ✅ |
+| 2 | 断点续传抽取管道（含种子数据） | ✅ |
+| 3 | Graph RAG 约束生成引擎 | ✅ |
+| 4 | 图像生成管线对接 | ✅ |
+| 5 | RESTful API 封装 | ✅ |
+| 6 | 非遗传承人审核工作流 | ⏳ |
+| 7 | 真实数据源接入（网站爬取） | ⏳ |
+| 8 | 对接真实 SD / ControlNet 模型 | ⏳ |
 
-### 日志与告警
-- 检索失败告警
-- 性能下降告警
-- 数据同步异常告警
-
-## 🔄 更新与维护
-
-### 数据更新策略
-- **实时更新**: 用户行为数据
-- **每日更新**: 热度、评分数据
-- **每周更新**: 景区基础信息
-- **每月更新**: 知识图谱全量重建
-
-### 版本管理
-- 知识图谱版本化
-- 增量更新回滚机制
-- Schema演进支持
+---
 
 ## 🤝 贡献指南
 
-欢迎提交Issue和Pull Request。在提交PR前，请确保：
+欢迎提交 Issue 和 Pull Request。在提交 PR 前，请确保：
 1. 代码通过单元测试
 2. 遵循代码规范
 3. 更新相关文档
+
+剪纸领域知识欢迎非遗传承人、民俗学者参与审核和补充。
+
+---
 
 ## 📄 许可证
 
@@ -255,4 +336,4 @@ llm:
 
 ---
 
-**技术支持**: 如有任何问题，请提交Issue或联系开发团队。
+**技术支持**: 如有任何问题，请提交 Issue 或联系开发团队。
