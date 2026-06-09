@@ -1,0 +1,61 @@
+{
+    "pipeline_name": "剪纸知识图谱抽取管道",
+    "description": "配置数据源、断点状态、抽取参数",
+    "run_id": "",
+    "state_dir": "./pipeline_state",
+
+    "neo4j": {
+        "enabled": false,
+        "uri": "bolt://localhost:7687",
+        "user": "neo4j",
+        "password": "password"
+    },
+
+    "sources": [
+        {
+            "id": "seed_builtin",
+            "type": "seed",
+            "enabled": true,
+            "description": "内置种子数据（用于开发和测试）"
+        },
+        {
+            "id": "file_import",
+            "type": "file",
+            "enabled": false,
+            "path": "./data/papercut_import.json",
+            "description": "本地导入文件（传承人提供的 CSV/JSON）"
+        },
+        {
+            "id": "web_crawl",
+            "type": "web",
+            "enabled": false,
+            "url": "",
+            "description": "待定：剪纸知识来源网站"
+        },
+        {
+            "id": "api_feed",
+            "type": "api",
+            "enabled": false,
+            "url": "",
+            "description": "待定：API 数据接口"
+        }
+    ],
+
+    "extraction": {
+        "confidence_threshold": 0.6,
+        "enable_relation_extraction": true,
+        "enable_entity_fusion": true,
+        "max_entities_per_source": 1000
+    },
+
+    "checkpoint": {
+        "stages": [
+            "load_seed_data",
+            "collect_data",
+            "extract_entities",
+            "extract_relations",
+            "fuse_entities",
+            "output_results"
+        ]
+    }
+}
